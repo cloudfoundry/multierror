@@ -50,11 +50,14 @@ func (e *MultiError) Add(err error) {
 // err must be non-nil
 // prefix can be empty
 func (e *MultiError) AddWithPrefix(err error, prefix string) {
-	errors, ok := err.(MultiError)
-	if ok {
-		errors.prefixAll(prefix)
-		e.errors = append(e.errors, errors.errors...)
-	} else {
+	switch err := err.(type) {
+	case MultiError:
+		err.prefixAll(prefix)
+		e.errors = append(e.errors, err.errors...)
+	case *MultiError:
+		err.prefixAll(prefix)
+		e.errors = append(e.errors, err.errors...)
+	default:
 		e.errors = append(e.errors, fmt.Errorf("%s%s", prefix, err.Error()))
 	}
 }
