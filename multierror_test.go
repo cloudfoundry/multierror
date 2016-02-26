@@ -93,6 +93,34 @@ var _ = Describe("Multierror", func() {
 				Expect(m.Error()).To(ContainSubstring("Error 1"))
 				Expect(m.Error()).To(ContainSubstring("Error 2"))
 			})
+
+			Context("when there are nested errors", func() {
+				BeforeEach(func() {
+					innermostError := multierror.MultiError{}
+					innermostError.Add(fmt.Errorf("innermost error"))
+
+					innerError := multierror.MultiError{}
+					innerError.Add(fmt.Errorf("inner error 1"))
+					innerError.Add(fmt.Errorf("inner error 2"))
+					innerError.Add(innermostError)
+
+					m.Add(innerError)
+				})
+
+				It("presents the nested-ness of the errors", func() {
+					Expect(m.Error()).To(Equal(
+						`encountered 3 errors during validation:
+    * Error 1
+    * Error 2
+    * encountered 3 errors during validation:
+        * inner error 1
+        * inner error 2
+        * encountered 1 error during validation:
+            * innermost error`,
+					),
+					)
+				})
+			})
 		})
 
 		It("should say encountered 0 errors", func() {

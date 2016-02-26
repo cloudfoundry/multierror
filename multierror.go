@@ -1,34 +1,49 @@
 package multierror
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type MultiError struct {
 	errors []error
 }
 
 func (e MultiError) Error() string {
-	var errStr string
-	if len(e.errors) == 1 {
-		errStr = "encountered 1 error during validation:\n"
+	aggregatedErrors := []string{errorsHeader(len(e.errors))}
+	for _, err := range e.errors {
+		aggregatedErrors = append(aggregatedErrors, indentLines(err))
+	}
+	return strings.Join(aggregatedErrors, "\n")
+}
+
+func indentLines(err error) string {
+	var indentedErrors []string
+	for _, line := range strings.Split(prefixErrorString(err), "\n") {
+		indentedErrors = append(indentedErrors, fmt.Sprintf("    %s", line))
+	}
+	return fmt.Sprintf("%s", strings.Join(indentedErrors, "\n"))
+}
+
+func prefixErrorString(err error) string {
+	return fmt.Sprintf("* %s", err.Error())
+}
+
+func errorsHeader(length int) string {
+	var grammar string
+	if length == 1 {
+		grammar = "1 error"
 	} else {
-		errStr = fmt.Sprintf("encountered %d errors during validation:\n", len(e.errors))
+		grammar = fmt.Sprintf("%d errors", length)
 	}
 
-	for _, err := range e.errors {
-		errStr = fmt.Sprintf("%s%s\n", errStr, err.Error())
-	}
-	return errStr
+	return fmt.Sprintf("encountered %s during validation:", grammar)
 }
 
 // Add an error to the collection of errors.
 // err must be non-nil
 func (e *MultiError) Add(err error) {
-	errors, ok := err.(MultiError)
-	if ok {
-		e.errors = append(e.errors, errors.errors...)
-	} else {
-		e.errors = append(e.errors, err)
-	}
+	e.errors = append(e.errors, err)
 }
 
 // Add an error to the collection of errors with a provided prefix.
