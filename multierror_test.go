@@ -11,137 +11,171 @@ import (
 
 var _ = Describe("Multierror", func() {
 	var (
-		m multierror.MultiError
+		m *multierror.MultiError
 	)
 
 	BeforeEach(func() {
-		m = multierror.MultiError{}
+		m = multierror.NewMultiError("top level field")
 	})
 
 	Describe("Add", func() {
-		It("adds an error", func() {
-			m.Add(fmt.Errorf("Sample Error"))
-			Expect(m.HasAny()).To(BeTrue())
-			Expect(m.Error()).To(ContainSubstring("Sample Error"))
+		Describe("adding a regular (non-MultiError) error", func() {
+			It("creates a multierror with an empty list, and adds the error", func() {
+				err := fmt.Errorf("Sample Error")
+				m.Add(err)
+				Expect(m.Length()).To(Equal(1))
+				Expect(m.Error()).To(ContainSubstring("Sample Error"))
+			})
 		})
 
 		Describe("adding a MultiError", func() {
 			It("adds all the errors", func() {
 				m.Add(fmt.Errorf("Error 1"))
 				m.Add(fmt.Errorf("Error 2"))
-				m2 := multierror.MultiError{}
+				m2 := multierror.NewMultiError("inner field")
 				m2.Add(fmt.Errorf("Error 3"))
 				m2.Add(fmt.Errorf("Error 4"))
-
 				m.Add(m2)
 
-				Expect(m.Error()).To(ContainSubstring("Error 1"))
-				Expect(m.Error()).To(ContainSubstring("Error 2"))
-				Expect(m.Error()).To(ContainSubstring("Error 3"))
-				Expect(m.Error()).To(ContainSubstring("Error 4"))
-			})
-
-			Context("when the multierror is empty", func() {
-				It("retains existing errors", func() {
-					m.Add(fmt.Errorf("Error 1"))
-					m.Add(fmt.Errorf("Error 2"))
-					m2 := multierror.MultiError{}
-
-					m.Add(m2)
-
-					Expect(m.Error()).To(ContainSubstring("Error 1"))
-					Expect(m.Error()).To(ContainSubstring("Error 2"))
-				})
+				Expect(m.Errors).To(ContainElement(m2))
+				Expect(m.Length()).To(Equal(4))
 			})
 		})
 	})
 
-	Describe("AddWithPrefix", func() {
-		It("adds an error with prefix", func() {
-			m.AddWithPrefix(fmt.Errorf("Error 1"), "Prefix:")
+	Describe("Length", func() {
+		Context("when the MultiError is a leaf node", func() {
+			BeforeEach(func() {
+				m.Add(fmt.Errorf("leaf error"))
+			})
 
-			Expect(m.Error()).To(ContainSubstring("Prefix:Error 1"))
+			It("returns 1", func() {
+				innerError := m.Errors[0]
+				Expect(innerError.Length()).To(Equal(1))
+			})
 		})
 
-		Context("adding a MultiError", func() {
-			It("adds all the errors with prefix", func() {
-				m.AddWithPrefix(fmt.Errorf("Error 1"), "Prefix:")
-				m.AddWithPrefix(fmt.Errorf("Error 2"), "Prefix:")
-				m2 := multierror.MultiError{}
-				m2.Add(fmt.Errorf("Error 3"))
-				m2.Add(fmt.Errorf("Error 4"))
+		Context("when the MultiError is not a leaf node, but is empty", func() {
+			It("returns 0", func() {
+				Expect(m.Length()).To(Equal(0))
+			})
+		})
 
-				m.AddWithPrefix(m2, "Prefix:")
+		Context("when there are nested empty MultiErrors", func() {
+			BeforeEach(func() {
+				innerMostError := multierror.NewMultiError("innermost field")
+				innerError := multierror.NewMultiError("inner field")
+				innerError.Add(innerMostError)
+				m.Add(innerError)
+			})
 
-				Expect(m.Error()).To(ContainSubstring("Prefix:Error 1"))
-				Expect(m.Error()).To(ContainSubstring("Prefix:Error 2"))
-				Expect(m.Error()).To(ContainSubstring("Prefix:Error 3"))
-				Expect(m.Error()).To(ContainSubstring("Prefix:Error 4"))
+			It("returns 0", func() {
+				Expect(m.Length()).To(Equal(0))
+			})
+		})
+
+		Context("when the multi error contains sub-errors", func() {
+			BeforeEach(func() {
+				m.Add(fmt.Errorf("error 1"))
+				m.Add(fmt.Errorf("error 2"))
+				m.Add(fmt.Errorf("error 3"))
+			})
+
+			It("returns the number of sub-errors", func() {
+				Expect(m.Length()).To(Equal(3))
+			})
+
+			Context("when the sub-errors are MultiErrors", func() {
+				BeforeEach(func() {
+					nestedError := multierror.NewMultiError("inner field")
+					nestedError.Add(fmt.Errorf("inner error 1"))
+					nestedError.Add(fmt.Errorf("inner error 2"))
+					m.Add(nestedError)
+				})
+
+				It("includes the nested sub-errors in the length", func() {
+					Expect(m.Length()).To(Equal(5))
+				})
 			})
 		})
 	})
 
 	Describe("Error", func() {
-		Context("when there are errors", func() {
-			BeforeEach(func() {
-				m.Add(fmt.Errorf("Error 1"))
-				m.Add(fmt.Errorf("Error 2"))
+		Context("when multierrors are empty", func() {
+			It("should say there were 0 errors", func() {
+				Expect(m.Error()).To(ContainSubstring("there were 0 errors"))
 			})
 
-			It("prints all the errors", func() {
-				Expect(m.Error()).To(ContainSubstring("encountered 2 errors during validation"))
-				Expect(m.Error()).To(ContainSubstring("Error 1"))
-				Expect(m.Error()).To(ContainSubstring("Error 2"))
+			Context("when there are nested multierrors but no actual errors", func() {
+				BeforeEach(func() {
+					m.Add(multierror.NewMultiError("another nested field"))
+				})
+				It("should say there were 0 errors", func() {
+					Expect(m.Error()).To(ContainSubstring("there were 0 errors"))
+				})
+			})
+		})
+
+		Context("when there are errors", func() {
+
+			Context("when the MultiError is a leaf node", func() {
+				BeforeEach(func() {
+					m.Add(fmt.Errorf("leaf error"))
+				})
+
+				It("returns a header with length plus the error message", func() {
+					innerError := m.Errors[0]
+					Expect(m.Error()).To(ContainSubstring("there was 1 error"))
+					Expect(m.Error()).To(ContainSubstring(innerError.Message))
+				})
 			})
 
 			Context("when there are nested errors", func() {
 				BeforeEach(func() {
-					innermostError := multierror.MultiError{}
-					innermostError.Add(fmt.Errorf("innermost error"))
+					cfErrors := multierror.NewMultiError("cf")
+					cfErrors.Add(fmt.Errorf("the file was blah"))
+					cfErrors.Add(fmt.Errorf("the thing was foo"))
 
-					innerError := multierror.MultiError{}
-					innerError.Add(fmt.Errorf("inner error 1"))
-					innerError.Add(fmt.Errorf("inner error 2"))
-					innerError.Add(innermostError)
+					stemcellErrors := multierror.NewMultiError("stemcell")
+					stemcellErrors.Add(fmt.Errorf("it stole my money"))
 
-					m.Add(innerError)
+					stubsErrors := multierror.NewMultiError("stubs")
+					stubsErrors.Add(fmt.Errorf("top level error for stubs occurred"))
+
+					stub1Errors := multierror.NewMultiError("stub \"my-stub-1\"")
+					stub1Errors.Add(fmt.Errorf("it never puts the toilet seat down"))
+					stub1Errors.Add(fmt.Errorf("it can't\n handle\n all these lines"))
+
+					stub2Errors := multierror.NewMultiError("stub \"my-stub-2\"")
+					stub2Errors.Add(fmt.Errorf("error 1"))
+					stub2Errors.Add(fmt.Errorf("error 2"))
+
+					stubsErrors.Add(stub1Errors)
+					stubsErrors.Add(stub2Errors)
+
+					m.Add(cfErrors)
+					m.Add(stemcellErrors)
+					m.Add(stubsErrors)
 				})
 
 				It("presents the nested-ness of the errors", func() {
-					Expect(m.Error()).To(Equal(
-						`encountered 3 errors during validation:
-    * Error 1
-    * Error 2
-    * encountered 3 errors during validation:
-        * inner error 1
-        * inner error 2
-        * encountered 1 error during validation:
-            * innermost error`,
-					),
-					)
+					Expect(m.Error()).To(ContainSubstring(`there were 8 errors with 'top level field'`))
+					Expect(m.Error()).To(ContainSubstring(`    there were 2 errors with 'cf':`))
+					Expect(m.Error()).To(ContainSubstring(`        * the file was blah`))
+					Expect(m.Error()).To(ContainSubstring(`        * the thing was foo`))
+					Expect(m.Error()).To(ContainSubstring(`    there was 1 error with 'stemcell':`))
+					Expect(m.Error()).To(ContainSubstring(`        * it stole my money`))
+					Expect(m.Error()).To(ContainSubstring(`    there were 5 errors with 'stubs':`))
+					Expect(m.Error()).To(ContainSubstring(`        * top level error for stubs occurred`))
+					Expect(m.Error()).To(ContainSubstring(`        there were 2 errors with 'stub "my-stub-1"':`))
+					Expect(m.Error()).To(ContainSubstring(`            * it never puts the toilet seat down`))
+					Expect(m.Error()).To(ContainSubstring(`            * it can't`))
+					Expect(m.Error()).To(ContainSubstring(`              handle`))
+					Expect(m.Error()).To(ContainSubstring(`              all these lines`))
+					Expect(m.Error()).To(ContainSubstring(`        there were 2 errors with 'stub "my-stub-2"':`))
+					Expect(m.Error()).To(ContainSubstring(`            * error 1`))
+					Expect(m.Error()).To(ContainSubstring(`            * error 2`))
 				})
-			})
-		})
-
-		It("should say encountered 0 errors", func() {
-			Expect(m.Error()).To(ContainSubstring("encountered 0 errors during validation"))
-		})
-	})
-
-	Describe("HasAny", func() {
-		Context("when there are errors", func() {
-			BeforeEach(func() {
-				m.Add(fmt.Errorf("Error 1"))
-			})
-
-			It("returns true", func() {
-				Expect(m.HasAny()).To(BeTrue())
-			})
-		})
-
-		Context("when there are no errors", func() {
-			It("returns false", func() {
-				Expect(m.HasAny()).To(BeFalse())
 			})
 		})
 	})
