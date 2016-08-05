@@ -3,7 +3,7 @@ package multierror_test
 import (
 	"fmt"
 
-	"github.com/cloudfoundry/multierror"
+	"code.cloudfoundry.org/multierror"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
