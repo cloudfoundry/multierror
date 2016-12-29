@@ -67,9 +67,10 @@ func (m *MultiError) getMessage() string {
 	msg := fmt.Sprintf("there %s", grammar)
 
 	if m.Message != "" {
-		msg = fmt.Sprintf("%s with '%s':", msg, m.Message)
+		msg = fmt.Sprintf("%s with '%s'", msg, m.Message)
 	}
-	return msg
+
+	return fmt.Sprintf("%s:", msg)
 }
 
 func (m *MultiError) formatError(indent int) string {
