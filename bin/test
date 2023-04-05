@@ -12,8 +12,8 @@ pushd "${base_dir}" > /dev/null
     -p \
     -r \
     -race \
-    -randomizeAllSpecs \
-    -randomizeSuites \
-    -failOnPending \
+    -randomize-all \
+    -randomize-suites  \
+    -fail-on-pending \
     "$@"
 popd > /dev/null
